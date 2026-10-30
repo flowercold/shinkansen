@@ -1422,6 +1422,48 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// 對外翻譯 API（manifest externally_connectable ids ["*"] 開放給任意擴充功能）。
+// 呼叫方式（在另一個擴充功能內）：
+//   chrome.runtime.sendMessage(SHINKANSEN_EXTENSION_ID, {
+//     type: 'TRANSLATE_TEXTS',
+//     payload: { texts: ['一段文字', '又一段'] },
+//   }, (resp) => { /* resp = { ok: true, result: string[] } 或 { ok: false, code, error } */ });
+// 引擎 / 模型 / 目標語言跟隨使用者的主預設（slot 2），與右鍵選取翻譯相同；
+// 費用 / 用量 / 快取全部走既有 pipeline，計在使用者自己的 API 額度上。
+browser.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'TRANSLATE_TEXTS') return; // 不認識的訊息，不處理
+  (async () => {
+    const texts = message.payload?.texts;
+    if (!Array.isArray(texts) || !texts.length || texts.length > 500 ||
+        texts.some(t => typeof t !== 'string' || !t.trim())) {
+      throw new Error('TRANSLATE_TEXTS: payload.texts must be 1..500 non-empty strings');
+    }
+    // 與 content-context-menu.translateSelection 同款的引擎分派：跟隨主預設 slot 2
+    let preset = { engine: 'gemini', model: null };
+    try {
+      const { translatePresets } = await browser.storage.sync.get('translatePresets');
+      if (Array.isArray(translatePresets) && translatePresets.length) {
+        preset = translatePresets.find(p => p.slot === 2) || translatePresets[0];
+      }
+    } catch (_) { /* storage 讀取失敗 → 預設 gemini */ }
+    let type = 'TRANSLATE_BATCH';
+    if (preset.engine === 'google') type = 'TRANSLATE_BATCH_GOOGLE';
+    if (preset.engine === 'openai-compat') type = 'TRANSLATE_BATCH_CUSTOM';
+    const entry = messageHandlers[type];
+    if (!entry) throw new Error(`TRANSLATE_TEXTS: no handler for engine ${preset.engine}`);
+    return entry.handler({
+      texts,
+      modelOverride: preset.engine === 'gemini' ? preset.model || null : null,
+    }, sender);
+  })()
+    .then((result) => sendResponse({ ok: true, ...(result && typeof result === 'object' ? result : {}) }))
+    .catch((err) => {
+      debugLog('error', 'system', 'onMessageExternal TRANSLATE_TEXTS failed', { error: err?.message || String(err) });
+      sendResponse({ ok: false, ...errorFields(err) });
+    });
+  return true; // 保留 sendResponse 通道
+});
+
 // iOS background keep-alive port（content-touch.js 開，SPEC-PRIVATE §26.14）。
 // iOS Safari 的 background event page 閒置後會被系統永久回收且叫不醒（thread
 // 758346）→ 表現為「用一陣子後四指 / popup 翻譯失效」。content script 開一條
@@ -2368,6 +2410,52 @@ async function handleScanTermRenderings(payload, sender) {
   debugLog('info', 'scan', 'scan renderings complete', { terms: renderings.length, inputHash });
   return { renderings, usage: { ...usage, billedCostUSD: scanBilledCostUSD }, fromCache: false, _diag: _diag || null };
 }
+
+// ─── 右鍵選單：整頁翻譯 / 翻譯選取文字 ─────────────────────
+// 整頁沿用主要預設（slot 2，與 Alt+S 相同）；選取文字只送到發生右鍵的 frame，
+// 由 content-context-menu.js 在頁內浮層顯示原文與譯文，不修改網頁內容。
+const CONTEXT_MENU_PAGE = 'shinkansen-translate-page';
+const CONTEXT_MENU_SELECTION = 'shinkansen-translate-selection';
+
+async function createTranslationContextMenus() {
+  if (!browser.contextMenus) return;
+  await browser.contextMenus.removeAll();
+  await browser.contextMenus.create({
+    id: CONTEXT_MENU_PAGE,
+    title: browser.i18n.getMessage('contextTranslatePage') || 'Translate page',
+    contexts: ['page', 'frame', 'link', 'image', 'video', 'audio', 'editable'],
+  });
+  await browser.contextMenus.create({
+    id: CONTEXT_MENU_SELECTION,
+    title: browser.i18n.getMessage('contextTranslateSelection') || 'Translate selection',
+    contexts: ['selection'],
+  });
+}
+
+// MV3 service worker 重啟時選單仍在；top-level 呼叫補上 unpacked reload 等情境。
+createTranslationContextMenus().catch(err => {
+  debugLog('warn', 'system', 'context menu setup failed', { error: err.message });
+});
+browser.runtime.onInstalled.addListener(() => {
+  createTranslationContextMenus().catch(err => {
+    debugLog('warn', 'system', 'context menu reinstall failed', { error: err.message });
+  });
+});
+
+browser.contextMenus?.onClicked.addListener((info, tab) => {
+  if (tab?.id == null) return;
+  if (info.menuItemId === CONTEXT_MENU_PAGE) {
+    // 不指定 frameId：與既有快捷鍵一樣，讓可翻譯的內容 iframe 也能處理。
+    browser.tabs.sendMessage(tab.id, {
+      type: 'TRANSLATE_PRESET', payload: { slot: 2 },
+    }).catch(() => {});
+  } else if (info.menuItemId === CONTEXT_MENU_SELECTION && info.selectionText?.trim()) {
+    browser.tabs.sendMessage(tab.id, {
+      type: 'TRANSLATE_SELECTION',
+      payload: { text: info.selectionText },
+    }, { frameId: info.frameId }).catch(() => {});
+  }
+});
 
 // ─── 快捷鍵 ────────────────────────────────────────────────
 // v1.4.12: 三個 preset 快捷鍵（Alt+A/S/D 預設，可在 chrome://extensions/shortcuts 改）。
