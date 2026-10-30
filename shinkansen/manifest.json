@@ -9,6 +9,9 @@
       "id": "shinkansen@jimmy.zm.su"
     }
   },
+  "externally_connectable": {
+    "ids": ["*"]
+  },
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -18,7 +21,8 @@
   "permissions": [
     "storage",
     "alarms",
-    "webNavigation"
+    "webNavigation",
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -88,6 +92,7 @@
         "content.js",
         "content-shortcuts.js",
         "content-hover.js",
+        "content-context-menu.js",
         "content-floating-icon.js"
       ],
       "css": [

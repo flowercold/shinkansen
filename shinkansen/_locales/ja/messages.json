@@ -22,5 +22,17 @@
   },
   "cmdSendInstapaper": {
     "message": "Instapaper に送る"
+  },
+  "contextTranslatePage": {
+    "message": "Shinkansen でこのページを翻訳"
+  },
+  "contextTranslateSelection": {
+    "message": "Shinkansen で選択テキストを翻訳"
+  },
+  "selectionOriginal": {
+    "message": "原文"
+  },
+  "selectionTranslating": {
+    "message": "翻訳中…"
   }
 }

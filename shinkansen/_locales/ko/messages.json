@@ -22,5 +22,17 @@
   },
   "cmdSendInstapaper": {
     "message": "Instapaper로 보내기"
+  },
+  "contextTranslatePage": {
+    "message": "Shinkansen으로 이 페이지 번역"
+  },
+  "contextTranslateSelection": {
+    "message": "Shinkansen으로 선택한 텍스트 번역"
+  },
+  "selectionOriginal": {
+    "message": "원문"
+  },
+  "selectionTranslating": {
+    "message": "번역 중…"
   }
 }

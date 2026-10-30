@@ -22,5 +22,17 @@
   },
   "cmdSendInstapaper": {
     "message": "Enviar a Instapaper"
+  },
+  "contextTranslatePage": {
+    "message": "Traducir esta página con Shinkansen"
+  },
+  "contextTranslateSelection": {
+    "message": "Traducir selección con Shinkansen"
+  },
+  "selectionOriginal": {
+    "message": "Original"
+  },
+  "selectionTranslating": {
+    "message": "Traduciendo…"
   }
 }

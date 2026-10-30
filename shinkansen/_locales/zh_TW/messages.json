@@ -22,5 +22,17 @@
   },
   "cmdSendInstapaper": {
     "message": "送到 Instapaper"
+  },
+  "contextTranslatePage": {
+    "message": "使用 Shinkansen 翻譯本頁"
+  },
+  "contextTranslateSelection": {
+    "message": "使用 Shinkansen 翻譯選取文字"
+  },
+  "selectionOriginal": {
+    "message": "原文"
+  },
+  "selectionTranslating": {
+    "message": "翻譯中…"
   }
 }
