@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/tools/custom-sync.py\" preflight",
+            "timeout": 120,
+            "statusMessage": "获取上游并预览差异，不修改代码"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"$CLAUDE_PROJECT_DIR/tools/custom-sync.py\" stop",
+            "timeout": 10,
+            "statusMessage": "检查完成任务的提交与同步"
+          }
+        ]
+      }
+    ]
+  }
+}
