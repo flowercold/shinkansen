@@ -2955,7 +2955,28 @@
   // 掛到 SK 讓 content-spa.js（SPA 導航續翻）也能呼叫
   SK.handleTranslatePreset = handleTranslatePreset;
 
+  let externalPageStarting = false;
   browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg?.type === 'EXTERNAL_TRANSLATE_PAGE') {
+      if (!/^https?:$/.test(location.protocol) || SK.INSTANCE?.stoodDown) {
+        sendResponse({ ok: false, error: 'Page translation unavailable in this frame' });
+      } else if (STATE.translating || externalPageStarting) {
+        sendResponse({ ok: true, status: 'already-running' });
+      } else if (SK.isPageTranslated() && !untranslatedPartialKind()) {
+        sendResponse({ ok: true, status: 'already-translated' });
+      } else {
+        // 只回啟動確認；整頁翻譯仍由既有 pipeline 非同步處理。
+        externalPageStarting = true;
+        (async () => {
+          try { await handleTranslatePreset(2); }
+          catch (err) {
+            SK.sendLog('error', 'translate', 'external page translation failed', { error: err?.message });
+          } finally { externalPageStarting = false; }
+        })();
+        sendResponse({ ok: true, status: 'accepted' });
+      }
+      return false;
+    }
     if (msg?.type === 'TRANSLATE_PRESET') {
       handleTranslatePreset(Number(msg.payload?.slot));
       return;

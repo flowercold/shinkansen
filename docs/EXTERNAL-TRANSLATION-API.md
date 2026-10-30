@@ -125,4 +125,54 @@ async function renderTranslation(outputElement, sourceText) {
 4. 测试多条文本顺序、空数组/空字符串的错误响应、错误扩展 ID 的连接错误。
 5. 切换主预设与目标语言，确认调用结果跟随设置；按实际需要测试三种引擎。
 
-当前文档基于代码核对，真实浏览器跨扩展调用尚未在本会话验证。
+## 普通网页翻译：TRANSLATE_PAGE
+
+从调用方扩展发送（tabId 是已打开的网页标签页 ID，不是 URL）：
+
+```javascript
+const response = await chrome.runtime.sendMessage(SHINKANSEN_ID, {
+  type: 'TRANSLATE_PAGE',
+  payload: { tabId: 123, frameId: 0 },
+});
+if (!response?.ok) throw new Error(response?.error || '无法启动网页翻译');
+```
+
+frameId 可省略，默认 0，仅处理指定 frame；不会广播到所有 iframe。该 frame 必须是 HTTP/HTTPS 网页，并已加载且允许新干线内容脚本运行。新安装或重载扩展后需要刷新网页。浏览器内部页、其他插件页面、无内容脚本或无访问权的页面会失败；不自动打开 URL 或注入脚本。
+
+响应为 `{ ok: true, status, tabId, frameId }`。status 为 accepted（请求已接受，不代表最终翻译成功或完成）、already-running 或 already-translated。重复调用不会取消翻译或恢复原文。页面渲染、目标语言和引擎使用新干线现有整页流程及主预设 slot 2。此接口暂不提供完成事件或恢复操作。
+
+## 其他插件自己的页面：页面适配器
+
+将本仓库 `shinkansen/sdk/page-translator.mjs` 复制并打包到调用方扩展中。浏览器禁止新干线向另一插件页面直接注入，因此适配器必须由对方主动加载；无须开放其 web_accessible_resources，也不从新干线远程加载代码。
+
+在 popup、侧边栏或扩展页面的本地模块脚本中使用：
+
+```javascript
+import { createPageTranslator } from './page-translator.mjs';
+
+const translator = createPageTranslator({
+  extensionId: SHINKANSEN_ID,
+  root: document.querySelector('main'),
+  mode: 'bilingual', // 或 replace
+  batchSize: 20,
+});
+document.querySelector('#translate').addEventListener('click', async () => {
+  try {
+    const result = await translator.translate();
+    console.log(result.status, result.translated);
+  } catch (error) {
+    console.error(error); // 调用方应展示错误
+  }
+});
+document.querySelector('#restore').addEventListener('click', () => translator.restore());
+```
+
+HTML 用 `<script type="module" src="page.js"></script>` 加载自己的本地脚本，禁止内联脚本。root 必须是已存在的 DOM 容器，建议不包含翻译/恢复按钮本身。
+
+适配器逐文本节点提取、批次请求现有 TRANSLATE_TEXTS，并安全地以纯文本显示译文。bilingual 保留原文，在其后插入译文；replace 修改文本节点，保留元素及事件监听。restore 恢复适配器改动，并忽略本次尚未返回的结果（不会取消已经发出的付费请求）。宿主在等待期间修改的节点不会被旧响应覆盖。
+
+跳过输入框、可编辑区域、脚本/样式、代码块、hidden、aria-hidden、translate="no" 和 data-shinkansen-ignore 区域；这不是完整的视觉可见性检测。不会访问 iframe、Shadow DOM、属性文本、placeholder 或图片内容。动态新增文本需主动再次调用 translate()；并发调用会报错。部分批次成功后后续失败时，已显示译文保留，可 restore 后重试。框架管理的界面建议选用专门的静态内容容器，避免框架重渲染与 DOM 插入竞争。
+
+这是一套轻量页面适配器，不包含新干线网页引擎的所有正文识别、SPA 或字幕功能。它通过新干线完成翻译，页面 DOM 操作运行在调用方自己的上下文。
+
+自动化检查：`node --test tools/external-translation.test.mjs`。真实浏览器跨扩展调用、服务付费请求尚未在本会话验证。

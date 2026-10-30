@@ -2,6 +2,7 @@
 // 職責：接收翻譯請求、呼叫 Gemini API、處理快取、處理快捷鍵、統一除錯 Log。
 
 import { browser } from './lib/compat.js';
+import { requestPageTranslation } from './lib/external-page.js';
 import { IS_IOS_BUILD } from './lib/distribution.js'; // Phase 2: host app 設定橋接只在 iOS build 走 native messaging
 import { translateBatch, extractGlossary, extractTermRenderings, translateBatchStream, summarizeArticle } from './lib/gemini.js';
 import { translateBatch as translateBatchCustom, extractGlossary as extractGlossaryCustom } from './lib/openai-compat.js'; // v1.5.7
@@ -1431,8 +1432,12 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // 引擎 / 模型 / 目標語言跟隨使用者的主預設（slot 2），與右鍵選取翻譯相同；
 // 費用 / 用量 / 快取全部走既有 pipeline，計在使用者自己的 API 額度上。
 browser.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
-  if (message?.type !== 'TRANSLATE_TEXTS') return; // 不認識的訊息，不處理
+  if (!['TRANSLATE_TEXTS', 'TRANSLATE_PAGE'].includes(message?.type)) return;
   (async () => {
+    if (!sender?.id) throw new Error('External extension sender required');
+    if (message.type === 'TRANSLATE_PAGE') {
+      return requestPageTranslation(message.payload, browser.tabs);
+    }
     const texts = message.payload?.texts;
     if (!Array.isArray(texts) || !texts.length || texts.length > 500 ||
         texts.some(t => typeof t !== 'string' || !t.trim())) {
